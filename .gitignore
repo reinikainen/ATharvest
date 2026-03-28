@@ -6,6 +6,7 @@ node_modules/
 
 # Generated reports
 atharvest-*.md
+reports/
 
 # Logs
 npm-debug.log*

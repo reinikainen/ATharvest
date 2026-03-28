@@ -25,7 +25,7 @@ Example:
 Example output file:
 
 ```text
-atharvest-atmosphereconf-2026-03-28T10-00-00Z.md
+reports/atharvest-atmosphereconf-2026-03-28T10-00-00Z.md
 ```
 
 ## Requirements
@@ -41,6 +41,8 @@ Run directly from the repo:
 ```bash
 ./atharvest -h '#atmosphereconf' -t 3
 ```
+
+Reports are written into `reports/` by default. That directory is git-ignored.
 
 If you want a bare `atharvest` command on your `PATH`:
 
@@ -112,6 +114,12 @@ ATHARVEST_API_BASE_URL=https://your-proxy.example ./atharvest -h '#atmospherecon
 ```
 
 ## Output Format
+
+Default output directory:
+
+```text
+reports/
+```
 
 The generated Markdown report includes:
 

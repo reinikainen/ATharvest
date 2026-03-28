@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseArgs, runCli } from "../src/cli.js";
 import {
   buildOutputFilename,
@@ -218,6 +218,42 @@ test("runCli writes markdown output file", async () => {
 
   assert.match(markdown, /https:\/\/example\.com/);
   assert.match(markdown, /example\.bsky\.social/);
+});
+
+test("runCli writes to the default reports directory", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "atharvest-default-"));
+  const stdout = memoryStream();
+  const stderr = memoryStream();
+  const now = new Date("2026-03-28T10:00:00.000Z");
+
+  const fetchImpl = async () => ({
+    ok: true,
+    async json() {
+      return {
+        posts: [],
+      };
+    },
+  });
+
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+
+  try {
+    const exitCode = await runCli(["-h", "#atmosphereconf", "-t", "3"], {
+      stdout,
+      stderr,
+      fetchImpl,
+      now,
+      apiBaseUrl: "https://public.api.bsky.app",
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(stderr.output, "");
+    assert.equal(basename(stdout.output.trim()), "atharvest-atmosphereconf-2026-03-28T10-00-00Z.md");
+    assert.match(stdout.output.trim(), /reports\/atharvest-atmosphereconf-2026-03-28T10-00-00Z\.md$/);
+  } finally {
+    process.chdir(originalCwd);
+  }
 });
 
 function memoryStream() {

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   buildOutputFilename,
@@ -21,6 +21,7 @@ Examples:
 Notes:
   -h is reserved for the hashtag input in this tool.
   Use --help for help output.`;
+const DEFAULT_OUTPUT_DIR = "reports";
 
 export async function runCli(argv, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -64,11 +65,10 @@ export async function runCli(argv, io = {}) {
     });
 
     const markdown = renderMarkdown(result);
-    const outputFile = resolve(
-      options.outputDir ?? process.cwd(),
-      buildOutputFilename(normalizedHashtag.tag, now),
-    );
+    const outputDir = resolve(options.outputDir ?? DEFAULT_OUTPUT_DIR);
+    const outputFile = resolve(outputDir, buildOutputFilename(normalizedHashtag.tag, now));
 
+    await mkdir(outputDir, { recursive: true });
     await writeFile(outputFile, markdown, "utf8");
 
     stdout.write(`${outputFile}\n`);
