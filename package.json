@@ -1,0 +1,17 @@
+{
+  "name": "atharvest",
+  "version": "0.1.0",
+  "description": "Harvest links from Bluesky posts matching a hashtag into markdown.",
+  "type": "module",
+  "bin": {
+    "atharvest": "./bin/atharvest.js"
+  },
+  "scripts": {
+    "atharvest": "node ./bin/atharvest.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}
