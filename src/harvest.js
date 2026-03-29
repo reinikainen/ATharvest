@@ -10,6 +10,8 @@ const DEFAULT_API_BASE_URLS = [
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_REQUESTS = 64;
 const DEFAULT_MIN_WINDOW_MS = 15 * 60 * 1000;
+const SEARCH_MODE_BOUNDED = "bounded";
+const SEARCH_MODE_PUBLIC_COMPAT = "public-compat";
 
 export function normalizeHashtag(input) {
   if (typeof input !== "string") {
@@ -59,10 +61,49 @@ export async function harvestHashtagLinks(options) {
   const seenPostUris = new Set();
   const authContext = await createAuthContext({ auth, fetchImpl });
   const apiBaseUrls = resolveApiBaseUrls(apiBaseUrl, authContext);
+  const searchMode = resolveSearchMode({ apiBaseUrl, authContext });
   let requestsMade = 0;
   let complete = true;
   let apiBaseUrlUsed = apiBaseUrls[0];
-  const windows = [{ since: cutoff, until: now }];
+  const windows =
+    searchMode === SEARCH_MODE_BOUNDED ? [{ since: cutoff, until: now }] : [];
+
+  if (searchMode === SEARCH_MODE_PUBLIC_COMPAT) {
+    const page = await searchPostsPage({
+      fetchImpl,
+      apiBaseUrls,
+      hashtag,
+      since: cutoff,
+      until: now,
+      limit: pageSize,
+      headers: authContext?.headers,
+      searchMode,
+    });
+
+    const pagePosts = Array.isArray(page.posts) ? page.posts : [];
+
+    requestsMade += 1;
+    apiBaseUrlUsed = page.apiBaseUrl ?? apiBaseUrlUsed;
+    complete = !page.cursor && pagePosts.length < pageSize;
+
+    for (const post of pagePosts) {
+      if (!postMatchesHashtag(post, hashtag)) {
+        continue;
+      }
+
+      const postDate = getPostDate(post);
+      if (!postDate || postDate < cutoff || postDate > now) {
+        continue;
+      }
+
+      if (seenPostUris.has(post.uri)) {
+        continue;
+      }
+
+      seenPostUris.add(post.uri);
+      posts.push(post);
+    }
+  }
 
   while (windows.length > 0 && requestsMade < maxRequests) {
     const window = windows.shift();
@@ -74,6 +115,7 @@ export async function harvestHashtagLinks(options) {
       until: window.until,
       limit: pageSize,
       headers: authContext?.headers,
+      searchMode,
     });
 
     requestsMade += 1;
@@ -136,18 +178,30 @@ export async function harvestHashtagLinks(options) {
 }
 
 export async function searchPostsPage(options) {
-  const { fetchImpl, apiBaseUrls, hashtag, since, until, limit, headers } = options;
+  const {
+    fetchImpl,
+    apiBaseUrls,
+    hashtag,
+    since,
+    until,
+    limit,
+    headers,
+    searchMode = SEARCH_MODE_BOUNDED,
+  } = options;
   const failures = [];
 
   for (const apiBaseUrl of apiBaseUrls) {
     const url = new URL("/xrpc/app.bsky.feed.searchPosts", apiBaseUrl);
 
     url.searchParams.set("q", hashtag.display);
-    url.searchParams.set("tag", hashtag.tag);
     url.searchParams.set("sort", "latest");
     url.searchParams.set("limit", String(limit));
-    url.searchParams.set("since", since.toISOString());
-    url.searchParams.set("until", until.toISOString());
+
+    if (searchMode === SEARCH_MODE_BOUNDED) {
+      url.searchParams.set("tag", hashtag.tag);
+      url.searchParams.set("since", since.toISOString());
+      url.searchParams.set("until", until.toISOString());
+    }
 
     try {
       const data = await requestJson(url, fetchImpl, {
@@ -502,6 +556,14 @@ function resolveApiBaseUrls(apiBaseUrl, authContext) {
   }
 
   return DEFAULT_API_BASE_URLS;
+}
+
+function resolveSearchMode(options) {
+  const { authContext } = options;
+
+  return authContext?.headers?.authorization
+    ? SEARCH_MODE_BOUNDED
+    : SEARCH_MODE_PUBLIC_COMPAT;
 }
 
 export function renderMarkdown(result) {

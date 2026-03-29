@@ -60,16 +60,24 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Authentication
 
-Anonymous Bluesky search can return `403` for some queries or provider paths. If that happens, use a Bluesky app password.
+Bluesky credentials are required. `atharvest` does not fall back to anonymous search.
 
-Set these environment variables:
+Create a repo-local `.env` file from the example:
 
 ```bash
-export BLUESKY_IDENTIFIER='your-handle.bsky.social'
-export BLUESKY_APP_PASSWORD='your-app-password'
+cp .env.example .env
 ```
 
-Then run the same command:
+Then edit `.env` and set your credentials:
+
+```dotenv
+BLUESKY_IDENTIFIER=your-handle.bsky.social
+BLUESKY_APP_PASSWORD=your-app-password
+```
+
+`.env` is git-ignored and loaded automatically by the CLI. Shell exports are still supported, and they take precedence over values in `.env`.
+
+Then run the command:
 
 ```bash
 ./atharvest -h '#atmosphereconf' -t 3
@@ -141,6 +149,7 @@ Each harvested entry includes:
 - In `zsh`, quote hashtags like `'#atmosphereconf'` so `#` is not treated as a comment.
 - `-h` is used for the hashtag parameter in this tool. Use `--help` for help output.
 - The tool uses Bluesky's `app.bsky.feed.searchPosts` API.
+- Credentials are loaded from `.env` in the project root by default.
 - Results are lightweight and fast, but still best-effort rather than firehose-level archival guarantees.
 
 ## Development

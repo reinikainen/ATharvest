@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildOutputFilename,
   harvestHashtagLinks,
@@ -22,6 +23,8 @@ Notes:
   -h is reserved for the hashtag input in this tool.
   Use --help for help output.`;
 const DEFAULT_OUTPUT_DIR = "reports";
+const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_ENV_PATH = resolve(PROJECT_ROOT, ".env");
 
 export async function runCli(argv, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -49,12 +52,21 @@ export async function runCli(argv, io = {}) {
   }
 
   try {
+    await loadEnvFile(options.envPath ?? DEFAULT_ENV_PATH);
+
     const normalizedHashtag = normalizeHashtag(options.hashtag);
     const now = options.now ?? new Date();
     const auth = {
       identifier: process.env.BLUESKY_IDENTIFIER ?? process.env.ATHARVEST_BLUESKY_IDENTIFIER,
       password: process.env.BLUESKY_APP_PASSWORD ?? process.env.ATHARVEST_BLUESKY_APP_PASSWORD,
     };
+
+    if (!auth.identifier || !auth.password) {
+      throw new Error(
+        "Bluesky credentials are required. Set BLUESKY_IDENTIFIER and BLUESKY_APP_PASSWORD.",
+      );
+    }
+
     const result = await harvestHashtagLinks({
       hashtag: normalizedHashtag,
       days: options.days,
@@ -74,16 +86,7 @@ export async function runCli(argv, io = {}) {
     stdout.write(`${outputFile}\n`);
     return 0;
   } catch (error) {
-    const authMissing =
-      !process.env.BLUESKY_IDENTIFIER &&
-      !process.env.ATHARVEST_BLUESKY_IDENTIFIER &&
-      !process.env.BLUESKY_APP_PASSWORD &&
-      !process.env.ATHARVEST_BLUESKY_APP_PASSWORD;
-    const authHint =
-      authMissing && error.message.includes("HTTP 403")
-        ? "\nHint: Bluesky search can require authentication. Set BLUESKY_IDENTIFIER and BLUESKY_APP_PASSWORD."
-        : "";
-    stderr.write(`atharvest failed: ${error.message}${authHint}\n`);
+    stderr.write(`atharvest failed: ${error.message}\n`);
     return 1;
   }
 }
@@ -144,4 +147,62 @@ function parseDays(value) {
   }
 
   return days;
+}
+
+export async function loadEnvFile(envPath = DEFAULT_ENV_PATH) {
+  let content;
+
+  try {
+    content = await readFile(envPath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return;
+    }
+
+    throw new Error(`Unable to read env file at ${envPath}: ${error.message}`);
+  }
+
+  for (const [index, rawLine] of content.split(/\r?\n/u).entries()) {
+    const line = rawLine.trim();
+
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const match = rawLine.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/u);
+
+    if (!match) {
+      throw new Error(`Invalid env file syntax at ${envPath}:${index + 1}`);
+    }
+
+    const [, key, rawValue] = match;
+
+    if (process.env[key] !== undefined) {
+      continue;
+    }
+
+    process.env[key] = parseEnvValue(rawValue);
+  }
+}
+
+function parseEnvValue(rawValue) {
+  const trimmed = rawValue.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+
+  const hashIndex = trimmed.indexOf(" #");
+  if (hashIndex >= 0) {
+    return trimmed.slice(0, hashIndex).trimEnd();
+  }
+
+  return trimmed;
 }
